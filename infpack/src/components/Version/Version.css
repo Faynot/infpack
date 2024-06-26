@@ -1,0 +1,70 @@
+@font-face {
+	font-family: 'Quentin';
+	src: url('/public/font/QuentinPro.ttf') format('truetype');
+	font-weight: normal;
+	font-style: normal;
+}
+
+.version-container {
+	min-width: 50%;
+	margin-top: 3.5rem;
+	margin-left: 0;
+	align-self: flex-start;
+	margin-right: 0.5rem;
+	position: relative;
+}
+
+.version-select {
+	-moz-appearance: none;
+	-webkit-appearance: none;
+	appearance: none;
+	outline: none;
+	width: 100%;
+	font-size: 16px;
+	border-radius: 50px;
+	background-color: #0c0c0c;
+	padding: 0.5rem 1rem 0.5rem 1.5rem;
+	border: none;
+	font-family: 'Quentin';
+	font-size: 200%;
+	color: #fff;
+	cursor: pointer;
+	transition:
+		background-color 0.3s,
+		box-shadow 0.3s,
+		transform 0.3s;
+	box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.version-select:hover {
+	background-color: #090909;
+	box-shadow: 0 8px 12px rgba(0, 0, 0, 0.2);
+	transform: translateY(-5px);
+}
+
+.select::-ms-expand {
+	display: none;
+}
+
+.sl-wr {
+	position: relative;
+	transition: transform 0.3s;
+}
+
+.sl-wr::before {
+	content: '';
+	position: absolute;
+	top: 50%;
+	right: 15px;
+	transform: translateY(-50%);
+	display: block;
+	width: 30px;
+	height: 30px;
+	background: url('/public/Select.png') no-repeat center center;
+	background-size: contain;
+	pointer-events: none; /* Чтобы изображение стрелочки не влияло на события наведения */
+}
+
+.version-select:hover + .sl-wr::before {
+	transform: translateY(-50%) translateY(-5px);
+}

@@ -1,0 +1,245 @@
+import axios from "axios";
+import { saveAs } from "file-saver";
+import JSZip from "jszip";
+import debounce from "lodash/debounce";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import select from '../../../public/Select.png';
+
+interface ResourcePack {
+  project_id: string;
+  title: string;
+  icon_url: string;
+  description?: string;
+  download_url?: string;
+}
+
+const ModrinthResourcePackManager: React.FC = () => {
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<ResourcePack[]>([]);
+  const [selectedPacks, setSelectedPacks] = useState<ResourcePack[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [blocked, setBlocked] = useState(false);
+  const [requestCount, setRequestCount] = useState<number>(0);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [expandedModId, setExpandedModId] = useState(null);
+  const [expandedPackId, setExpandedPackId] = useState(null);
+
+  const toggleExpandPack = (packId: any) => {
+    setExpandedPackId(expandedPackId === packId ? null : packId);
+  };
+
+  const toggleExpand = (modId: any) => {
+    setExpandedModId(expandedModId === modId ? null : modId);
+  };
+
+  
+  const incrementRequestCount = () => {
+    setRequestCount((prevCount) => {
+      const newCount = prevCount + 1;
+      if (newCount >= 900 && !blocked) {
+        setBlocked(true);
+        if (timeoutRef.current) {
+          clearTimeout(timeoutRef.current);
+        }
+        timeoutRef.current = setTimeout(() => {
+          setBlocked(false);
+          setRequestCount(0);
+        }, 60000);
+      }
+      return newCount;
+    });
+  };
+
+  const resetRequestCount = () => {
+    setRequestCount(0);
+  };
+  
+  resetRequestCount;
+
+  console.log(requestCount);
+
+  const fetchResourcePacks = useCallback(
+    debounce(async (query: string) => {
+      if (blocked) {
+        alert("You are putting too much load on the server, please wait just one minute");
+        return;
+      }
+
+      if (query.length > 2) {
+        try {
+          incrementRequestCount();
+          setLoading(true);
+          const response = await axios.get(`https://api.modrinth.com/v2/search`, {
+            params: {
+              query,
+              facets: `[["project_type:resourcepack"]]`,
+            },
+            timeout: 10000,
+          });
+          setSearchResults(response.data.hits);
+        } catch (error) {
+          console.error("Ошибка при поиске ресурспаков:", error);
+        } finally {
+          setLoading(false);
+        }
+      } else {
+        setSearchResults([]);
+      }
+    }, 500),
+    [blocked]
+  );
+
+  useEffect(() => {
+    fetchResourcePacks(searchQuery);
+  }, [searchQuery, fetchResourcePacks]);
+
+  const fetchResourcePackDownloadUrl = async (pack: ResourcePack) => {
+    try {
+      const response = await axios.get(
+        `https://api.modrinth.com/v2/project/${pack.project_id}/version`,
+        { timeout: 10000 }
+      );
+      const version = response.data[0];
+      return version.files[0].url;
+    } catch (error) {
+      console.error("Ошибка при получении ссылки для скачивания ресурспака:", error);
+      return null;
+    }
+  };
+
+  const handleAddPack = async (pack: ResourcePack) => {
+    if (!selectedPacks.find((p) => p.project_id === pack.project_id)) {
+      const downloadUrl = await fetchResourcePackDownloadUrl(pack);
+      setSelectedPacks((prevPacks) => [...prevPacks, { ...pack, download_url: downloadUrl }]);
+    }
+  };
+
+  const handleRemovePack = (pack: ResourcePack) => {
+    setSelectedPacks((prevPacks) => prevPacks.filter((p) => p.project_id !== pack.project_id));
+  };
+
+  const handleDownload = async () => {
+    if (blocked) {
+      alert(
+        "You are putting too much load on the server, please wait just one minute"
+      );
+      return;
+    }
+
+    const zip = new JSZip();
+    const minecraftFolder = zip.folder("resourcepacks");
+    if (!minecraftFolder) return;
+
+    await Promise.all(
+      selectedPacks.map(async (pack) => {
+        if (pack.download_url) {
+          const response = await axios.get(pack.download_url, {
+            responseType: "blob",
+          });
+          minecraftFolder.file(`${pack.title}.zip`, response.data);
+        }
+      })
+    );
+
+    const zipBlob = await zip.generateAsync({ type: "blob" });
+    saveAs(zipBlob, "infpackRESOURCEPACKS.zip");
+  };
+
+
+  return (
+    <div className="modrinth">
+      <div className="modrinthR-container">
+        <div className="modrinth-content">
+          <div className="modrinthR-left">
+            <div className="sr" >
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search for resourcepacks..."
+              className="ul-mod"
+            />
+            {loading ? (
+              <div className="loader"></div>
+            ) : (
+              searchQuery && (
+                <ul className="modrinth-list">
+      {searchResults.map((pack) => (
+        <li className="li-mod" key={pack.project_id} onClick={() => handleAddPack(pack)} >
+          <button
+            onClick={() => {
+              toggleExpandPack(pack.project_id);
+            }}
+            className="toggle-button"
+          >
+            <img
+              src={select}
+              alt={expandedPackId === pack.project_id ? 'Collapse' : 'Expand'}
+              className={expandedPackId === pack.project_id ? 'expanded' : 'collapsed'}
+            />
+          </button>
+          <img src={pack.icon_url} alt={pack.title} className="mod-icon" />
+          <span className="added">{pack.title}</span>
+          {expandedPackId === pack.project_id && (
+            <div className="pack-details">
+              <p>Additional details about {pack.title}</p>
+            </div>
+          )}
+        </li>
+      ))}
+    </ul>
+              )
+            )}
+          </div>
+          </div>
+          <div className="modrinth-right">
+            <h3>Selected ResourcePacks:</h3>
+            <ul className="selected-mods-listR">
+              {selectedPacks.map((pack) => (
+                <li key={pack.project_id} className="selected-mod-item">
+                    <button
+            onClick={() => toggleExpand(pack.project_id)}
+            className="toggle-button"
+          >
+            <img
+              src={select}
+              alt={expandedModId === pack.project_id ? 'Collapse' : 'Expand'}
+              className={expandedModId === pack.project_id ? 'expanded' : 'collapsed'}
+            />
+          </button>
+          <img
+            src={pack.icon_url}
+            alt={pack.title}
+            className="mod-icon"
+          />
+          <span
+            className="added"
+          >
+            {pack.title}
+          </span>
+          
+          <button
+            onClick={() => handleRemovePack(pack)}
+            className="btn-mod"
+          >
+            Remove
+          </button>
+          {expandedModId === pack.project_id && (
+            <div className="mod-details">
+              <h2>{pack.description}</h2>
+            </div>
+          )}
+        </li>
+              ))}
+            </ul>
+            {selectedPacks.length > 0 && (
+              <button className="btn-mody" onClick={handleDownload}>Download ResourcePacks</button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default ModrinthResourcePackManager;
